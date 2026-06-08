@@ -24,23 +24,27 @@ def build_output_path(
     input_path: Path,
     output_format: AudioFormat,
     output_dir: Path | None = None,
+    suffix: str = "",
 ) -> Path:
     """
-    Compute the output file path for an extraction job.
+    Compute the output file path for an extraction or trim job.
 
     By default the output sits next to the input file (same directory),
     with the extension replaced by the chosen audio format. Supply
-    *output_dir* to redirect to a different folder.
+    *output_dir* to redirect to a different folder. Supply *suffix* to
+    append an extra string to the stem (e.g. "_trimmed").
 
     Collision handling: if the target path already exists, a numeric
     suffix is appended (e.g. "movie_1.mp3", "movie_2.mp3") so existing
     files are never silently overwritten.
 
     Args:
-        input_path:    Source video file path.
+        input_path:    Source file path.
         output_format: Desired audio output format (determines extension).
         output_dir:    Optional directory for the output file.
                        Defaults to input_path's parent directory.
+        suffix:        Optional string appended to the file stem before
+                       the extension (e.g. "_trimmed").
 
     Returns:
         A Path object that does not currently exist on disk.
@@ -50,14 +54,14 @@ def build_output_path(
         PosixPath('/videos/clip.mp3')
 
         >>> build_output_path(
-        ...     Path("/videos/clip.mp4"),
+        ...     Path("/audio/song.mp3"),
         ...     AudioFormat.WAV,
-        ...     output_dir=Path("/exports"),
+        ...     suffix="_trimmed",
         ... )
-        PosixPath('/exports/clip.wav')
+        PosixPath('/audio/song_trimmed.wav')
     """
     directory = output_dir if output_dir is not None else input_path.parent
-    stem = input_path.stem
+    stem = input_path.stem + suffix
     extension = output_format.value  # e.g. "mp3"
 
     candidate = directory / f"{stem}.{extension}"

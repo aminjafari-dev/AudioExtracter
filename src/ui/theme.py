@@ -52,6 +52,21 @@ class AppTheme:
     BORDER         = "#3A3A3C"
     BORDER_DROP    = "#6C63FF"   # Drop zone active border
 
+    # Waveform
+    WAVEFORM_BG        = "#1A1A1C"   # Waveform canvas background
+    WAVEFORM_BAR       = "#4A4560"   # Unselected waveform bar color
+    WAVEFORM_SELECTED  = "#6C63FF"   # Selected-region waveform bar
+    WAVEFORM_OVERLAY   = "rgba(108, 99, 255, 45)"  # Selection region tint
+    WAVEFORM_HANDLE    = "#A09AFF"   # Selection handle (vertical lines)
+    WAVEFORM_RULER_BG  = "#141416"   # Time ruler strip background
+    WAVEFORM_RULER_FG  = "#636366"   # Tick mark / time label color
+
+    # Tab bar
+    TAB_ACTIVE_BG   = "#6C63FF"   # Active tab background
+    TAB_INACTIVE_BG = "#2C2C2E"   # Inactive tab background
+    TAB_ACTIVE_FG   = "#FFFFFF"   # Active tab text
+    TAB_INACTIVE_FG = "#AEAEB2"   # Inactive tab text
+
     # ------------------------------------------------------------------
     # Typography
     # ------------------------------------------------------------------
@@ -227,5 +242,78 @@ class AppTheme:
             font-size: {t.FONT_SIZE_SM}px;
             font-weight: 600;
             letter-spacing: 1px;
+        }}
+
+        /* ── Tab bar ─────────────────────────────────────────────── */
+        #tabBar {{
+            background-color: {t.BG_WINDOW};
+            border-bottom: 1px solid {t.BORDER};
+        }}
+        #tabButton {{
+            border: none;
+            border-radius: 7px;
+            padding: 7px 24px;
+            font-size: {t.FONT_SIZE_BASE}px;
+            font-weight: 600;
+            color: {t.TAB_INACTIVE_FG};
+            background-color: transparent;
+        }}
+        #tabButton:hover {{
+            background-color: {t.BG_ELEVATED};
+            color: {t.TEXT_PRIMARY};
+        }}
+        #tabButtonActive {{
+            border: none;
+            border-radius: 7px;
+            padding: 7px 24px;
+            font-size: {t.FONT_SIZE_BASE}px;
+            font-weight: 600;
+            color: {t.TAB_ACTIVE_FG};
+            background-color: {t.TAB_ACTIVE_BG};
+        }}
+
+        /* ── Audio trimmer panel ────────────────────────────────── */
+        #trimmerPanel {{
+            background-color: {t.BG_WINDOW};
+        }}
+        #audioDropZone {{
+            background-color: {t.BG_SURFACE};
+            border: 1px dashed {t.BORDER};
+            border-radius: {t.BORDER_RADIUS}px;
+        }}
+        #audioDropZoneActive {{
+            background-color: {t.BG_DROP_ZONE};
+            border: 2px dashed {t.ACCENT};
+            border-radius: {t.BORDER_RADIUS}px;
+        }}
+        #waveformCanvas {{
+            background-color: {t.WAVEFORM_BG};
+            border-radius: 8px;
+        }}
+        #trimToolbar {{
+            background-color: {t.BG_SURFACE};
+            border-top: 1px solid {t.BORDER};
+        }}
+        #timeLabel {{
+            color: {t.TEXT_SECONDARY};
+            font-size: {t.FONT_SIZE_SM}px;
+        }}
+        #durationLabel {{
+            color: {t.ACCENT};
+            font-size: {t.FONT_SIZE_SM}px;
+            font-weight: 600;
+        }}
+        QDoubleSpinBox {{
+            background-color: {t.BG_ELEVATED};
+            color: {t.TEXT_PRIMARY};
+            border: 1px solid {t.BORDER};
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: {t.FONT_SIZE_SM}px;
+            min-width: 80px;
+        }}
+        QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+            width: 0px;
+            border: none;
         }}
         """
