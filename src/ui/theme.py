@@ -43,6 +43,10 @@ class AppTheme:
     STATUS_RUNNING = "#FFD60A"  # Yellow — currently processing
     STATUS_PENDING = "#8E8E93"  # Gray  — waiting in queue
 
+    # Silence-button green shades (hover / pressed derivatives of STATUS_DONE)
+    SILENCE_BTN_HOVER = "#3AE668"
+    SILENCE_BTN_PRESS = "#25B147"
+
     # Text
     TEXT_PRIMARY   = "#FFFFFF"
     TEXT_SECONDARY = "#AEAEB2"
@@ -294,6 +298,38 @@ class AppTheme:
             background-color: {t.BG_SURFACE};
             border-top: 1px solid {t.BORDER};
         }}
+
+        /* ── Silence removal toolbar ─────────────────────────────── */
+        /* Sits below the trim toolbar; shares the same surface colour
+           but uses a faint green-tinted top border to hint at its
+           distinct action category.                                   */
+        #silenceToolbar {{
+            background-color: {t.BG_SURFACE};
+            border-top: 1px solid {t.BORDER};
+        }}
+
+        /* Green CTA button used exclusively for the Remove Silence action.
+           Uses STATUS_DONE green so it reads as a "cleanup / positive"
+           action, visually distinct from the purple primary Trim button. */
+        QPushButton#silenceButton {{
+            background-color: {t.STATUS_DONE};
+            color: {t.BG_WINDOW};
+            border: none;
+            border-radius: {t.BUTTON_RADIUS}px;
+            padding: 8px 20px;
+            font-size: {t.FONT_SIZE_BASE}px;
+            font-weight: 600;
+        }}
+        QPushButton#silenceButton:hover {{
+            background-color: {t.SILENCE_BTN_HOVER};
+        }}
+        QPushButton#silenceButton:pressed {{
+            background-color: {t.SILENCE_BTN_PRESS};
+        }}
+        QPushButton#silenceButton:disabled {{
+            background-color: {t.BG_ELEVATED};
+            color: {t.TEXT_DISABLED};
+        }}
         #timeLabel {{
             color: {t.TEXT_SECONDARY};
             font-size: {t.FONT_SIZE_SM}px;
@@ -315,5 +351,92 @@ class AppTheme:
         QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
             width: 0px;
             border: none;
+        }}
+
+        /* ── Video compressor panel ──────────────────────────────── */
+        /* Main panel container */
+        #compressorPanel {{
+            background-color: {t.BG_WINDOW};
+        }}
+
+        /* Drop zone — idle state (no file loaded) */
+        #compressDropZone {{
+            background-color: {t.BG_SURFACE};
+            border: 2px dashed {t.BORDER};
+            border-radius: {t.BORDER_RADIUS}px;
+        }}
+
+        /* Drop zone — highlighted while a compatible drag hovers over it */
+        #compressDropZoneActive {{
+            background-color: {t.BG_DROP_ZONE};
+            border: 2px dashed {t.ACCENT};
+            border-radius: {t.BORDER_RADIUS}px;
+        }}
+
+        /* File info bar — shown once a video is loaded */
+        #compressFileBar {{
+            background-color: {t.BG_SURFACE};
+            border: 1px solid {t.BORDER};
+            border-radius: {t.BORDER_RADIUS}px;
+        }}
+
+        /* Settings card that wraps codec / CRF / preset controls */
+        #compressSettingsCard {{
+            background-color: {t.BG_SURFACE};
+            border: 1px solid {t.BORDER};
+            border-radius: {t.BORDER_RADIUS}px;
+        }}
+
+        /* Bottom action bar */
+        #compressActionBar {{
+            background-color: {t.BG_SURFACE};
+            border-top: 1px solid {t.BORDER};
+        }}
+
+        /* Status label — success (green) */
+        #compressStatusOk {{
+            color: {t.STATUS_DONE};
+            font-size: {t.FONT_SIZE_BASE}px;
+            font-weight: 600;
+            background: transparent;
+        }}
+
+        /* Status label — error (red) */
+        #compressStatusErr {{
+            color: {t.STATUS_FAILED};
+            font-size: {t.FONT_SIZE_BASE}px;
+            font-weight: 600;
+            background: transparent;
+        }}
+
+        /* Progress bar — thin accent-coloured bar inside the progress card.
+           The chunk (filled portion) uses the accent colour; the groove is
+           the same elevated background as other input widgets.              */
+        QProgressBar#compressProgressBar {{
+            background-color: {t.BG_ELEVATED};
+            border: none;
+            border-radius: 5px;
+        }}
+        QProgressBar#compressProgressBar::chunk {{
+            background-color: {t.ACCENT};
+            border-radius: 5px;
+        }}
+
+        /* CRF quality slider — accent-coloured handle */
+        QSlider::groove:horizontal {{
+            background: {t.BG_ELEVATED};
+            height: 4px;
+            border-radius: 2px;
+        }}
+        QSlider::handle:horizontal {{
+            background: {t.ACCENT};
+            width: 14px;
+            height: 14px;
+            margin: -5px 0;
+            border-radius: 7px;
+        }}
+        QSlider::sub-page:horizontal {{
+            background: {t.ACCENT};
+            border-radius: 2px;
         }}
         """

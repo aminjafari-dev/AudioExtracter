@@ -26,12 +26,14 @@ from src.ui.theme import AppTheme
 # Tab constants
 # ---------------------------------------------------------------------------
 
-TAB_VIDEO = 0
-TAB_AUDIO = 1
+TAB_VIDEO    = 0
+TAB_AUDIO    = 1
+TAB_COMPRESS = 2
 
 _LABELS = {
-    TAB_VIDEO: "🎬  Video",
-    TAB_AUDIO: "🎵  Audio",
+    TAB_VIDEO:    "🎬  Video",
+    TAB_AUDIO:    "🎵  Audio",
+    TAB_COMPRESS: "📦  Compress",
 }
 
 

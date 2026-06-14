@@ -2,14 +2,16 @@
 Main application window.
 
 MainWindow owns all top-level widgets and coordinates between them:
-  1. Hosts a top TabBar (Video / Audio tabs)
-  2. Switches a QStackedWidget between the Video panel and the Audio panel
+  1. Hosts a top TabBar (Video / Audio / Compress tabs)
+  2. Switches a QStackedWidget between the Video panel, the Audio panel,
+     and the Video Compress panel
   3. Video panel: full-window drag-and-drop, job queue, threaded extraction
   4. Audio panel: waveform visualisation and audio trimming (AudioTrimmerPanel)
+  5. Compress panel: single-file drop, quality settings, threaded compression
 
 Tab layout:
     MainWindow
-    ├─ TabBar                  (top navigation — Video / Audio)
+    ├─ TabBar                  (top navigation — Video / Audio / Compress)
     └─ QStackedWidget (pages)
         ├─ [0] Video page
         │   ├─ _DragOverlay    (transparent overlay during drag)
@@ -17,11 +19,12 @@ Tab layout:
         │   │   ├─ [0] EmptyStateWidget
         │   │   └─ [1] FileList
         │   └─ Toolbar
-        └─ [1] AudioTrimmerPanel
+        ├─ [1] AudioTrimmerPanel
+        └─ [2] VideoCompressorPanel
 
 Drag-and-drop:
-    Only the Video page accepts drops. The full-window dragEnterEvent
-    ignores events when the Audio tab is active.
+    Only the Video page accepts window-level drops. The Audio and Compress
+    panels each manage their own drag-and-drop internally.
 
 Usage:
     window = MainWindow()
@@ -47,8 +50,9 @@ from src.ui.theme import AppTheme
 from src.ui.widgets.audio_trimmer_panel import AudioTrimmerPanel
 from src.ui.widgets.drop_zone import EmptyStateWidget
 from src.ui.widgets.file_list import FileList
-from src.ui.widgets.tab_bar import TAB_AUDIO, TAB_VIDEO, TabBar
+from src.ui.widgets.tab_bar import TAB_AUDIO, TAB_COMPRESS, TAB_VIDEO, TabBar
 from src.ui.widgets.toolbar import Toolbar
+from src.ui.widgets.video_compressor_panel import VideoCompressorPanel
 from src.utils.file_utils import build_output_path
 from src.utils.validators import VIDEO_FILE_FILTER, filter_supported_videos
 
@@ -235,6 +239,12 @@ class MainWindow(QMainWindow):
         self._audio_panel = AudioTrimmerPanel(parent=self._page_stack)
         self._page_stack.addWidget(self._audio_panel)    # page index 1
 
+        # ── Compress page ─────────────────────────────────────────────
+        # VideoCompressorPanel handles its own drag-and-drop internally,
+        # just like AudioTrimmerPanel does for the audio tab.
+        self._compress_panel = VideoCompressorPanel(parent=self._page_stack)
+        self._page_stack.addWidget(self._compress_panel) # page index 2
+
         # Show the Video page initially.
         self._page_stack.setCurrentIndex(TAB_VIDEO)
 
@@ -277,14 +287,16 @@ class MainWindow(QMainWindow):
         """
         Switch the page stack to the selected tab.
 
-        Drag-and-drop acceptance on the window is only meaningful for the
-        Video tab; the Audio panel manages its own drops internally.
+        Window-level drag-and-drop is only meaningful for the Video tab
+        (TAB_VIDEO = 0).  The Audio and Compress panels each manage their
+        own drops internally, so we disable window-level DnD for those tabs.
 
         Args:
-            index: TAB_VIDEO (0) or TAB_AUDIO (1).
+            index: TAB_VIDEO (0), TAB_AUDIO (1), or TAB_COMPRESS (2).
         """
         self._page_stack.setCurrentIndex(index)
         # Only accept window-level drops when the Video page is active.
+        # The Audio and Compress panels handle their own DnD independently.
         self.setAcceptDrops(index == TAB_VIDEO)
 
     # ------------------------------------------------------------------

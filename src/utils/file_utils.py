@@ -75,6 +75,54 @@ def build_output_path(
     return candidate
 
 
+def build_video_output_path(
+    input_path: Path,
+    output_dir: Path | None = None,
+    suffix: str = "_compressed",
+) -> Path:
+    """
+    Compute the output file path for a video compression job.
+
+    The output is always an MP4 file. By default it is placed next to the
+    input file; pass *output_dir* to redirect to a different folder.
+
+    Collision handling mirrors build_output_path: if the target already
+    exists a numeric counter is appended to the stem.
+
+    Args:
+        input_path: Source video file path.
+        output_dir: Optional directory for the output file.
+                    Defaults to input_path's parent directory.
+        suffix:     String appended to the file stem before ".mp4".
+                    Default is "_compressed".
+
+    Returns:
+        A Path object that does not currently exist on disk.
+
+    Example:
+        >>> build_video_output_path(Path("/videos/raw.mov"))
+        PosixPath('/videos/raw_compressed.mp4')
+
+        >>> build_video_output_path(
+        ...     Path("/videos/raw.mov"),
+        ...     output_dir=Path("/output"),
+        ...     suffix="_small",
+        ... )
+        PosixPath('/output/raw_small.mp4')
+    """
+    directory = output_dir if output_dir is not None else input_path.parent
+    stem = input_path.stem + suffix
+    candidate = directory / f"{stem}.mp4"
+
+    # Avoid silently overwriting by appending a counter to the stem.
+    counter = 1
+    while candidate.exists():
+        candidate = directory / f"{stem}_{counter}.mp4"
+        counter += 1
+
+    return candidate
+
+
 def human_readable_size(path: Path) -> str:
     """
     Return a human-readable file size string for a given path.

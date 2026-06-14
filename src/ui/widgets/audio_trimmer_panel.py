@@ -64,7 +64,8 @@ from PyQt6.QtWidgets import (
 )
 
 from src.core.audio_loader import AUDIO_FILE_FILTER, AudioLoader, is_supported_audio
-from src.core.models import AudioFileInfo, AudioFormat, TrimJob
+from src.core.models import AudioFileInfo, AudioFormat, SilenceRemovalJob, TrimJob
+from src.core.silence_remover import SilenceRemover
 from src.core.trimmer import AudioTrimmer
 from src.ui.theme import AppTheme
 from src.ui.widgets.waveform_widget import WaveformWidget
@@ -92,6 +93,19 @@ class _TrimSignals(QObject):
     """Signals for the background trim worker."""
     finished = pyqtSignal(Path)   # output path on success
     failed   = pyqtSignal(str)    # error message on failure
+
+
+class _SilenceSignals(QObject):
+    """
+    Signals for the background silence-removal worker.
+
+    ``finished`` carries both the output path and the number of silence
+    segments that were detected and removed so the status bar can show
+    a meaningful summary to the user.
+    """
+    # (output_path, segments_removed)
+    finished = pyqtSignal(Path, int)
+    failed   = pyqtSignal(str)
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +169,41 @@ class _TrimWorker(QRunnable):
             result  = trimmer.trim(self._job)
             if result.success:
                 self._signals.finished.emit(result.output_path)
+            else:
+                self._signals.failed.emit(result.error_message)
+        except Exception as exc:  # noqa: BLE001
+            self._signals.failed.emit(str(exc))
+
+
+class _SilenceWorker(QRunnable):
+    """
+    Background worker: run SilenceRemover.remove_silence() for a job.
+
+    Emits ``_SilenceSignals.finished(output_path, segments_removed)`` on
+    success, or ``_SilenceSignals.failed(message)`` on any error.
+
+    Always submit to QThreadPool.globalInstance() — never call run() directly.
+
+    Example (internal):
+        worker = _SilenceWorker(job, signals)
+        QThreadPool.globalInstance().start(worker)
+    """
+
+    def __init__(self, job: SilenceRemovalJob, signals: _SilenceSignals) -> None:
+        super().__init__()
+        self._job     = job
+        self._signals = signals
+
+    @pyqtSlot()
+    def run(self) -> None:
+        """Run in a thread pool thread — never call directly."""
+        try:
+            remover = SilenceRemover()
+            result  = remover.remove_silence(self._job)
+            if result.success:
+                self._signals.finished.emit(
+                    result.output_path, result.segments_removed
+                )
             else:
                 self._signals.failed.emit(result.error_message)
         except Exception as exc:  # noqa: BLE001
@@ -333,6 +382,91 @@ class AudioTrimmerPanel(QWidget):
 
         root.addWidget(trim_bar_widget)
 
+        # ── Silence removal toolbar ───────────────────────────────────
+        # A second toolbar-style row that groups all silence-removal
+        # controls together. Sharing the same Format / Output controls
+        # from the trim toolbar above keeps the UI compact.
+        #
+        # Layout (left → right):
+        #   "Threshold:" [-30.0 dB spin]  "Min Silence:" [0.50 s spin]
+        #   "Padding:" [0.10 s spin]  <stretch>  [🔇 Remove Silence]
+        silence_bar_widget = QWidget(self)
+        silence_bar_widget.setObjectName("silenceToolbar")
+        silence_bar_widget.setFixedHeight(AppTheme.TOOLBAR_HEIGHT)
+
+        silence_bar = QHBoxLayout(silence_bar_widget)
+        silence_bar.setContentsMargins(12, 0, 0, 0)
+        silence_bar.setSpacing(8)
+
+        # Helper: create a small right-aligned label for the silence row.
+        def _silence_label(text: str) -> QLabel:
+            lbl = QLabel(text, self)
+            lbl.setObjectName("timeLabel")
+            return lbl
+
+        # Threshold spinbox — loudness floor below which audio is silence.
+        # Range: -80 dB (very quiet) to -10 dB (aggressive).
+        # Default -30 dB is a good balance for speech recordings.
+        thresh_lbl = _silence_label("Threshold:")
+        self._threshold_spin = QDoubleSpinBox(self)
+        self._threshold_spin.setRange(-80.0, -10.0)
+        self._threshold_spin.setValue(-30.0)
+        self._threshold_spin.setDecimals(1)
+        self._threshold_spin.setSingleStep(1.0)
+        self._threshold_spin.setSuffix(" dB")
+        self._threshold_spin.setToolTip(
+            "Audio quieter than this level is treated as silence.\n"
+            "Lower values (e.g. -40 dB) are more aggressive."
+        )
+
+        # Min silence duration spinbox — gaps shorter than this are kept.
+        # Prevents removing short natural pauses between words.
+        min_lbl = _silence_label("Min Silence:")
+        self._min_silence_spin = QDoubleSpinBox(self)
+        self._min_silence_spin.setRange(0.05, 10.0)
+        self._min_silence_spin.setValue(0.5)
+        self._min_silence_spin.setDecimals(2)
+        self._min_silence_spin.setSingleStep(0.1)
+        self._min_silence_spin.setSuffix(" s")
+        self._min_silence_spin.setToolTip(
+            "Only gaps longer than this are removed.\n"
+            "Increase to keep short natural pauses between words."
+        )
+
+        # Padding spinbox — buffer preserved at each edge of a silence boundary.
+        # Prevents clipping the first/last syllable of speech at a cut point.
+        pad_lbl = _silence_label("Padding:")
+        self._padding_spin = QDoubleSpinBox(self)
+        self._padding_spin.setRange(0.0, 2.0)
+        self._padding_spin.setValue(0.1)
+        self._padding_spin.setDecimals(2)
+        self._padding_spin.setSingleStep(0.05)
+        self._padding_spin.setSuffix(" s")
+        self._padding_spin.setToolTip(
+            "Extra audio kept on each side of a silence boundary.\n"
+            "Prevents cutting off the beginning or end of speech."
+        )
+
+        silence_bar.addWidget(thresh_lbl)
+        silence_bar.addWidget(self._threshold_spin)
+        silence_bar.addSpacing(12)
+        silence_bar.addWidget(min_lbl)
+        silence_bar.addWidget(self._min_silence_spin)
+        silence_bar.addSpacing(12)
+        silence_bar.addWidget(pad_lbl)
+        silence_bar.addWidget(self._padding_spin)
+        silence_bar.addStretch()
+
+        # Primary CTA for silence removal — green button to distinguish it
+        # visually from the purple "Trim" button above.
+        self._silence_btn = QPushButton("🔇  Remove Silence", self)
+        self._silence_btn.setObjectName("silenceButton")
+        self._silence_btn.setEnabled(False)
+        self._silence_btn.clicked.connect(self._on_remove_silence_clicked)
+        silence_bar.addWidget(self._silence_btn)
+
+        root.addWidget(silence_bar_widget)
+
         # ── Status bar ────────────────────────────────────────────────
         self._status_label = QLabel("", self)
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -467,7 +601,9 @@ class AudioTrimmerPanel(QWidget):
 
         # Sync spinboxes to full file range.
         self._sync_spinboxes_from_waveform()
+        # Enable both the trim and silence-removal buttons now that a file is ready.
         self._trim_btn.setEnabled(True)
+        self._silence_btn.setEnabled(True)
 
     @pyqtSlot(str)
     def _on_load_failed(self, message: str) -> None:
@@ -485,6 +621,8 @@ class AudioTrimmerPanel(QWidget):
             f"font-size: {AppTheme.FONT_SIZE_BASE}px; "
             "background: transparent;"
         )
+        # Keep silence button disabled when load failed — no valid file is open.
+        self._silence_btn.setEnabled(False)
         self._set_status(f"Error: {message}", error=True)
 
     # ------------------------------------------------------------------
@@ -590,6 +728,7 @@ class AudioTrimmerPanel(QWidget):
 
         self._busy = True
         self._trim_btn.setEnabled(False)
+        self._silence_btn.setEnabled(False)
         self._trim_btn.setText("Trimming…")
         self._set_status("Trimming…")
 
@@ -603,27 +742,122 @@ class AudioTrimmerPanel(QWidget):
     @pyqtSlot(Path)
     def _on_trim_finished(self, output_path: Path) -> None:
         """
-        Handle a successful trim — show a success status and re-enable the button.
+        Handle a successful trim — show a success status and re-enable buttons.
 
         Args:
             output_path: Path of the newly created trimmed file.
         """
         self._busy = False
         self._trim_btn.setEnabled(True)
+        self._silence_btn.setEnabled(True)
         self._trim_btn.setText("✂  Trim")
         self._set_status(f"Saved: {output_path.name}", error=False)
 
     @pyqtSlot(str)
     def _on_trim_failed(self, message: str) -> None:
         """
-        Handle a failed trim — show the error message.
+        Handle a failed trim — show the error message and re-enable buttons.
 
         Args:
             message: Error description from AudioTrimmer.
         """
         self._busy = False
         self._trim_btn.setEnabled(True)
+        self._silence_btn.setEnabled(True)
         self._trim_btn.setText("✂  Trim")
+        self._set_status(f"Error: {message}", error=True)
+
+    # ------------------------------------------------------------------
+    # Slots — silence removal
+    # ------------------------------------------------------------------
+
+    @pyqtSlot()
+    def _on_remove_silence_clicked(self) -> None:
+        """
+        Read the silence parameters from the spinboxes, build a
+        SilenceRemovalJob, and dispatch a _SilenceWorker to the thread pool.
+
+        Guards (same pattern as _on_trim_clicked):
+          - A file must be loaded (_info is not None).
+          - No other operation must be in progress (_busy flag).
+
+        The output file is written next to the source with the suffix
+        ``_no_silence``, using the same format and output directory
+        selected in the trim toolbar above.
+        """
+        if self._info is None or self._busy:
+            return
+
+        output_format: AudioFormat = self._format_combo.currentData()
+        output_path = build_output_path(
+            input_path=self._info.path,
+            output_format=output_format,
+            output_dir=self._output_dir,
+            suffix="_no_silence",
+        )
+
+        job = SilenceRemovalJob(
+            input_path=self._info.path,
+            output_path=output_path,
+            output_format=output_format,
+            threshold_db=self._threshold_spin.value(),
+            min_silence_duration=self._min_silence_spin.value(),
+            padding=self._padding_spin.value(),
+        )
+
+        self._busy = True
+        self._trim_btn.setEnabled(False)
+        self._silence_btn.setEnabled(False)
+        self._silence_btn.setText("Removing silence…")
+        self._set_status("Scanning for silence…")
+
+        signals = _SilenceSignals()
+        signals.finished.connect(self._on_silence_finished)
+        signals.failed.connect(self._on_silence_failed)
+
+        worker = _SilenceWorker(job, signals)
+        QThreadPool.globalInstance().start(worker)
+
+    @pyqtSlot(Path, int)
+    def _on_silence_finished(self, output_path: Path, segments_removed: int) -> None:
+        """
+        Handle a completed silence-removal operation.
+
+        Shows how many silence segments were removed in the status bar so
+        the user gets meaningful feedback even when the result sounds
+        identical (e.g. 0 silences found in a dense music track).
+
+        Args:
+            output_path:     Path of the newly written file.
+            segments_removed: Number of distinct silence intervals removed.
+        """
+        self._busy = False
+        self._trim_btn.setEnabled(True)
+        self._silence_btn.setEnabled(True)
+        self._silence_btn.setText("🔇  Remove Silence")
+
+        # Decide on a human-friendly summary depending on the result count.
+        if segments_removed == 0:
+            summary = f"Saved: {output_path.name}  (no silence detected)"
+        elif segments_removed == 1:
+            summary = f"Saved: {output_path.name}  (1 silence removed)"
+        else:
+            summary = f"Saved: {output_path.name}  ({segments_removed} silences removed)"
+
+        self._set_status(summary, error=False)
+
+    @pyqtSlot(str)
+    def _on_silence_failed(self, message: str) -> None:
+        """
+        Handle a failed silence-removal operation — show error and re-enable.
+
+        Args:
+            message: Error description from SilenceRemover.
+        """
+        self._busy = False
+        self._trim_btn.setEnabled(True)
+        self._silence_btn.setEnabled(True)
+        self._silence_btn.setText("🔇  Remove Silence")
         self._set_status(f"Error: {message}", error=True)
 
     # ------------------------------------------------------------------
